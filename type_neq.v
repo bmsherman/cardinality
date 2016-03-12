@@ -49,6 +49,16 @@ Require Fin.
 Require Iso.
 Require Import cardinality.
 
+Theorem no_iso_ineq : forall A B,
+  (Iso.T A B -> False) ->
+  A <> B.
+Proof.
+  unfold not; intros.
+  apply H.
+  rewrite H0.
+  apply Iso.Refl.
+Qed.
+
 Theorem one_cardinality : forall A n m
   (iso_n: cardinality A n)
   (iso_m: cardinality A m),
@@ -102,6 +112,14 @@ Restart.
   reflexivity.
   rewrite to_from in H.
   eapply Bool.no_fixpoint_negb; eauto.
+Qed.
+
+Corollary type_not_powerset : forall A,
+  A <> (A -> bool).
+Proof.
+  intros.
+  apply no_iso_ineq.
+  apply powerset_bigger.
 Qed.
 
 End TypeCardinality.
