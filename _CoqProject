@@ -3,3 +3,5 @@ Iso.v
 Finite.v
 finite_iso.v
 finite_function.v
+cardinality.v
+type_neq.v
