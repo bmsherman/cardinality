@@ -2,3 +2,4 @@
 Iso.v
 Finite.v
 finite_iso.v
+finite_function.v
