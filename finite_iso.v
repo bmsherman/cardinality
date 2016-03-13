@@ -1,3 +1,12 @@
+(**
+
+Properties of isomorphisms between finite types [Fin.t].
+
+Mostly defines lemmas building up to the main theorem, that if there
+is an isomorphism [Iso.T (Fin.t n) (Fin.t m)] then [n = m].
+
+*)
+
 Require Import Finite.
 
 Set Implicit Arguments.
@@ -44,6 +53,12 @@ Proof.
   auto.
 Qed.
 
+(** (Essentially) one direction of the [injective_plus] isomorphism in
+the case that the units map to one another, with an extra fact to make
+the proofs easier.
+
+The function itself is fairly messy so we define it in a proof. *)
+
 Lemma injective_unit_unit_to : forall A B
    (i: Iso.T (unit + A) (unit + B)),
    Iso.to i (inl tt) = inl tt ->
@@ -56,8 +71,17 @@ Proof.
   pose proof (iso_to_injective _ _ _ Heqs).
   congruence.
   eauto.
-Defined.
+(* note that the returned sig captures everything important about the
+function's behavior, so we can make the implementation completely
+opaque and still reason about the function! *)
+Qed.
 
+(** (Essentially) the other direction of the [injective_plus]
+isomorphism when the units map to one another.
+
+We use the same hypothesis (the to direction) to make using the
+function easy, and take care of deriving the appropriate fact about
+[from (inl tt)].  *)
 Lemma injective_unit_unit_from : forall A B
    (i: Iso.T (unit + A) (unit + B)),
    Iso.to i (inl tt) = inl tt ->
@@ -71,8 +95,12 @@ Proof.
   congruence.
 
   eauto.
-Defined.
+Qed.
 
+(** This is the difficult lemma that the main proof is ultimately
+based on. It proves that type successor, defined as (unit +), is
+injective modulo isomorphism. This really is a successor for the Fin
+type, which has a number of isomorphisms defined by Finite. *)
 Theorem injective_plus : forall A B
   (i: Iso.T (unit + A) (unit + B)),
   Iso.T A B.
@@ -85,9 +113,8 @@ Proof.
                Iso.from := fun b => proj1_sig
                                     (injective_unit_unit_from i Heqs b) |});
       intros.
-    case_eq (injective_unit_unit_to i Heqs a); intros; cbn.
-    case_eq (injective_unit_unit_from i Heqs x); intros; cbn.
-    clear H0.
+    destruct (injective_unit_unit_to i Heqs a); intros; cbn.
+    destruct (injective_unit_unit_from i Heqs x); intros; cbn.
     rewrite <- e in e0.
     rewrite (Iso.from_to i) in e0.
     congruence.
@@ -136,6 +163,7 @@ Proof.
     now rewrite (Iso.to_from i).
 Qed.
 
+(** convert from an isomorphism on [Fin.t] to one on [Finite.Fin] *)
 Lemma fint_iso_to_fin : forall n m,
     Iso.T (Fin.t n) (Fin.t m) ->
     Iso.T (Fin n) (Fin m).
@@ -149,6 +177,7 @@ Proof.
   apply Finite.finIso.
 Qed.
 
+(** convert from an isomorphism on [Finite.Fin] to one on [Fin.t] *)
 Lemma fin_iso_to_fint : forall n m,
     Iso.T (Fin n) (Fin m) ->
     Iso.T (Fin.t n) (Fin.t m).
@@ -162,6 +191,10 @@ Proof.
   apply Finite.finIso.
 Qed.
 
+(** This is the main lemma that gives the result, but all the
+difficult work is in the inductive cases, which is proven by
+[injective_plus] with the right induction, and in some minor
+isomorphism hops to reach the right expression of the types. *)
 Lemma no_smaller_iso : forall n k,
     Iso.T (Fin.t n) (Fin.t (n + S k)) ->
     False.
@@ -176,6 +209,8 @@ Proof.
   assumption.
 Qed.
 
+(** Re-express no_smaller_iso in terms of a < proof rather than an
+explicit difference, a simple arithmetic fact. *)
 Lemma no_smaller_iso' : forall n m,
     n < m ->
     Iso.T (Fin.t n) (Fin.t m) ->
@@ -188,6 +223,8 @@ Proof.
   eapply no_smaller_iso; eauto.
 Qed.
 
+(** The main lemma of this file is now a simple corollary, with the n
+< m and m < n cases symmetrically handled by the above. *)
 Theorem fin_iso : forall n m,
     Iso.T (Fin.t n) (Fin.t m) ->
     n = m.
