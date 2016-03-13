@@ -1,6 +1,11 @@
+(**
+
+Definition of and examples of type cardinalities.
+
+*)
+
 Require Fin.
 Require Iso.
-Require Import PeanoNat.
 Require Import Program.
 
 Definition cardinality A n := Iso.T A (Fin.t n).
