@@ -11,14 +11,68 @@ Require Import Finite.
 
 Set Implicit Arguments.
 
-Lemma iso_fin_0_1 :
-  Iso.T (Fin.t 0) (Fin.t 1) ->
-  False.
+Hint Rewrite @Iso.from_to : iso.
+Hint Rewrite @Iso.to_from : iso.
+
+(* helpers for using from_to and to_from with an equality
+rather than a syntatic from (to a) or to (from b) *)
+Lemma iso_from_to_eq : forall A B {i: Iso.T A B} {a a' b},
+  Iso.from i b = a ->
+  Iso.to i a' = b ->
+  a = a'.
 Proof.
-  destruct 1.
-  pose proof (from Fin.F1).
-  inversion H.
+  intros; subst; autorewrite with iso; auto.
 Qed.
+
+Lemma iso_to_from_eq : forall A B {i: Iso.T A B} {a b b'},
+  Iso.to i a = b ->
+  Iso.from i b' = a ->
+  b = b'.
+Proof.
+  intros; subst; autorewrite with iso; auto.
+Qed.
+
+(* behaves like pose proof pf but does nothing if a proof of the same
+fact is in the context *)
+Ltac learn pf :=
+  let P := type of pf in
+  lazymatch goal with
+  | [ H: P |- _ ] => fail
+  | _ => pose proof pf
+  end.
+
+Ltac simplify :=
+  (* simplifications *)
+  intros; cbn;
+  autorewrite with iso in *;
+  repeat lazymatch goal with
+    | [ u:unit |- _ ] => destruct u
+    end;
+  (* apply Iso inverse theorems with eq helpers *)
+  repeat match goal with
+         | [ H: Iso.from ?i ?b = _,
+                H': Iso.to ?i _ = ?b |- _ ] =>
+           learn (iso_from_to_eq H H')
+         | [ H: Iso.to ?i ?a = _,
+                H': Iso.from ?i _ = ?a |- _ ] =>
+           learn (iso_to_from_eq H H')
+         end;
+  (* solve simple goals *)
+  try congruence;
+  eauto.
+
+(* destruct the innermost match in e *)
+Ltac destruct_matches_in e :=
+  lazymatch e with
+  | context[match ?d with | _ => _ end] =>
+    destruct_matches_in d
+  | _ => case_eq e; intros
+  end.
+
+Ltac case_match :=
+  match goal with
+  | [ |- ?g ] => destruct_matches_in g; simplify
+  end.
 
 Lemma iso_fin_0_m : forall n,
   Iso.T (Fin.t 0) (Fin.t (S n)) ->
@@ -34,11 +88,9 @@ Lemma iso_to_injective : forall A B
   forall a a', Iso.to i a = Iso.to i a' ->
     a = a'.
 Proof.
-  destruct i; cbn; intros.
-  pose proof (from_to a).
-  rewrite H in H0.
-  rewrite from_to in H0.
-  auto.
+  intros.
+  pose proof (Iso.from_to i a).
+  rewrite H in H0; simplify.
 Qed.
 
 Lemma iso_from_injective : forall A B
@@ -46,11 +98,9 @@ Lemma iso_from_injective : forall A B
   forall b b', Iso.from i b = Iso.from i b' ->
     b = b'.
 Proof.
-  destruct i; cbn; intros.
-  pose proof (to_from b).
-  rewrite H in H0.
-  rewrite to_from in H0.
-  auto.
+  intros.
+  pose proof (Iso.to_from i b).
+  rewrite H in H0; simplify.
 Qed.
 
 (** (Essentially) one direction of the [injective_plus] isomorphism in
@@ -65,12 +115,10 @@ Lemma injective_unit_unit_to : forall A B
    (forall a, {b : B | Iso.to i (inr a) = inr b }).
 Proof.
   intros.
-  destruct (Iso.to i (inr a)) eqn:?.
-  destruct u.
-  rewrite <- H in Heqs.
-  pose proof (iso_to_injective _ _ _ Heqs).
+  case_eq (Iso.to i (inr a)); simplify.
+  rewrite <- H0 in H.
+  apply iso_to_injective in H.
   congruence.
-  eauto.
 (* note that the returned sig captures everything important about the
 function's behavior, so we can make the implementation completely
 opaque and still reason about the function! *)
@@ -88,13 +136,7 @@ Lemma injective_unit_unit_from : forall A B
    (forall b, {a : A | Iso.from i (inr b) = inr a}).
 Proof.
   intros.
-  destruct (Iso.from i (inr b)) eqn:?.
-  destruct u.
-  pose proof (Iso.to_from i (inr b)).
-  rewrite Heqs in H0.
-  congruence.
-
-  eauto.
+  case_eq (Iso.from i (inr b)); simplify.
 Qed.
 
 (** This is the difficult lemma that the main proof is ultimately
@@ -106,30 +148,15 @@ Theorem injective_plus : forall A B
   Iso.T A B.
 Proof.
   intros.
-  destruct (Iso.to i (inl tt)) eqn:?.
-  - destruct u.
-    refine ({| Iso.to := fun a => proj1_sig
-                                  (injective_unit_unit_to i Heqs a);
+  case_eq (Iso.to i (inl tt)); simplify.
+  - refine ({| Iso.to := fun a => proj1_sig
+                                  (injective_unit_unit_to i H a);
                Iso.from := fun b => proj1_sig
-                                    (injective_unit_unit_from i Heqs b) |});
-      intros.
-    destruct (injective_unit_unit_to i Heqs a); intros; cbn.
-    destruct (injective_unit_unit_from i Heqs x); intros; cbn.
-    rewrite <- e in e0.
-    rewrite (Iso.from_to i) in e0.
-    congruence.
-
-    case_eq (injective_unit_unit_from i Heqs b); intros; cbn.
-    case_eq (injective_unit_unit_to i Heqs x); intros; cbn.
-    clear H0.
-    rewrite <- e in e0.
-    rewrite (Iso.to_from i) in e0.
-    congruence.
-  - destruct (Iso.from i (inl tt)) eqn:?.
-    destruct u.
-    rewrite <- Heqs0 in Heqs.
-    rewrite (Iso.to_from i) in Heqs.
-    congruence.
+                                    (injective_unit_unit_from i H b) |});
+      simplify;
+      unfold proj1_sig; repeat case_match.
+  - (* derive from tt = some a *)
+    case_eq (Iso.from i (inl tt)); simplify.
     refine ({| Iso.to := fun a' =>
                            match Iso.to i (inr a') with
                            | inl tt => b
@@ -139,28 +166,9 @@ Proof.
                              match Iso.from i (inr b') with
                              | inl tt => a
                              | inr a' => a'
-                             end |}); intros.
-    destruct (Iso.to i (inr a0)) eqn:?.
-    destruct u.
-    rewrite <- Heqs.
-    rewrite (Iso.from_to i).
-    rewrite <- Heqs1 in *.
-    rewrite (Iso.from_to i) in Heqs0.
-    congruence.
-
-    rewrite <- Heqs1.
-    now rewrite (Iso.from_to i).
-
-    destruct (Iso.from i (inr b0)) eqn:?.
-    destruct u.
-    rewrite <- Heqs0.
-    rewrite (Iso.to_from i).
-    rewrite <- Heqs1 in *.
-    rewrite (Iso.to_from i) in Heqs.
-    congruence.
-
-    rewrite <- Heqs1.
-    now rewrite (Iso.to_from i).
+                             end |});
+      simplify;
+      repeat case_match.
 Qed.
 
 (** convert from an isomorphism on [Fin.t] to one on [Finite.Fin] *)
