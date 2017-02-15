@@ -169,7 +169,7 @@ Proof.
                                     (injective_unit_unit_from i H b) |});
       simplify;
       unfold proj1_sig; repeat case_match.
-Qed.
+Defined.
 
 (** convert from an isomorphism on [Fin.t] to one on [Finite.Fin] *)
 Lemma fint_iso_to_fin : forall n m,
