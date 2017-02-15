@@ -110,12 +110,12 @@ the proofs easier.
 The function itself is fairly messy so we define it in a proof. *)
 
 Lemma injective_unit_unit_to : forall A B
-   (i: Iso.T (unit + A) (unit + B)),
-   Iso.to i (inl tt) = inl tt ->
-   (forall a, {b : B | Iso.to i (inr a) = inr b }).
+   (i: Iso.T (option A) (option B)),
+   Iso.to i None = None ->
+   (forall a, {b : B | Iso.to i (Some a) = Some b }).
 Proof.
   intros.
-  case_eq (Iso.to i (inr a)); simplify.
+  case_eq (Iso.to i (Some a)); simplify.
   rewrite <- H0 in H.
   apply iso_to_injective in H.
   congruence.
@@ -131,12 +131,12 @@ We use the same hypothesis (the to direction) to make using the
 function easy, and take care of deriving the appropriate fact about
 [from (inl tt)].  *)
 Lemma injective_unit_unit_from : forall A B
-   (i: Iso.T (unit + A) (unit + B)),
-   Iso.to i (inl tt) = inl tt ->
-   (forall b, {a : A | Iso.from i (inr b) = inr a}).
+   (i: Iso.T (option A) (option B)),
+   Iso.to i None = None ->
+   (forall b, {a : A | Iso.from i (Some b) = Some a}).
 Proof.
   intros.
-  case_eq (Iso.from i (inr b)); simplify.
+  case_eq (Iso.from i (Some b)); simplify.
 Qed.
 
 (** This is the difficult lemma that the main proof is ultimately
@@ -144,31 +144,31 @@ based on. It proves that type successor, defined as (unit +), is
 injective modulo isomorphism. This really is a successor for the Fin
 type, which has a number of isomorphisms defined by Finite. *)
 Theorem injective_plus : forall A B
-  (i: Iso.T (unit + A) (unit + B)),
+  (i: Iso.T (option A) (option B)),
   Iso.T A B.
 Proof.
   intros.
-  case_eq (Iso.to i (inl tt)); simplify.
+  case_eq (Iso.to i None); simplify.
+  - (* derive from tt = some a *)
+    case_eq (Iso.from i None); simplify.
+    refine ({| Iso.to := fun a' =>
+                           match Iso.to i (Some a') with
+                           | None => b
+                           | Some b' => b'
+                           end;
+               Iso.from := fun b' =>
+                             match Iso.from i (Some b') with
+                             | None => a
+                             | Some a' => a'
+                             end |});
+      simplify;
+      repeat case_match.
   - refine ({| Iso.to := fun a => proj1_sig
                                   (injective_unit_unit_to i H a);
                Iso.from := fun b => proj1_sig
                                     (injective_unit_unit_from i H b) |});
       simplify;
       unfold proj1_sig; repeat case_match.
-  - (* derive from tt = some a *)
-    case_eq (Iso.from i (inl tt)); simplify.
-    refine ({| Iso.to := fun a' =>
-                           match Iso.to i (inr a') with
-                           | inl tt => b
-                           | inr b' => b'
-                           end;
-               Iso.from := fun b' =>
-                             match Iso.from i (inr b') with
-                             | inl tt => a
-                             | inr a' => a'
-                             end |});
-      simplify;
-      repeat case_match.
 Qed.
 
 (** convert from an isomorphism on [Fin.t] to one on [Finite.Fin] *)

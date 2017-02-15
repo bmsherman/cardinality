@@ -44,7 +44,7 @@ refine (
 - rewrite (to_from AB).
   rewrite (to_from BC).
   reflexivity.
-Qed.
+Defined.
 
 (** * Sigma type isomorphisms *)
 (** Isomorphisms between Sigma types with different indexing types. *)
@@ -53,8 +53,8 @@ Definition FSig {B : Empty_set -> Type} : T (sigT B) Empty_set.
 Proof. refine (
 {| to := @projT1 _ B
  ; from := Empty_set_rect (fun _ => sigT B) |}).
-intros. destruct a. inversion x.
-intros. inversion b.
+intros. destruct a. destruct x.
+intros. contradiction.
 Defined.
 
 Definition TSig {B : unit -> Type} : T (sigT B) (B tt).
@@ -96,15 +96,6 @@ destruct (from iso2 b) eqn:beqn.
 rewrite <- beqn. rewrite to_from; reflexivity.
 Defined.
 
-(* This is in fact "true" but, without Axiom K, the construction is a little
-   bit convoluted. It is proved in the HoTT library by transferring
-   isomorphisms to equivalences. *)
-Lemma sigmaProp {A A' : Type} {B : A -> Type}
-  (iso : T A A') 
-  : T (sigT B) (sigT (fun a' => B (from iso a'))).
-Proof.
-Abort.
-
 Lemma sigTimes {A B : Type} : T (A * B) (sigT (fun _ : A => B)).
 Proof.
 refine (
@@ -114,7 +105,7 @@ refine (
 Proof.
 intros. destruct a. reflexivity.
 intros. destruct b. reflexivity.
-Qed. 
+Defined. 
 
 (** * Function type isomorphisms *)
 (** Isomorphisms between function types with different argument types. *)
@@ -255,6 +246,21 @@ intros; apply functional_extensionality; intro x; simpl;
   reflexivity.
 Defined.
 
+Definition PlusComm {A B} : T (A + B) (B + A).
+Proof. refine (
+  {| to := fun x => match x with
+  | inl a => inr a
+  | inr b => inl b
+  end
+  ; from := fun y => match y with
+  | inl b => inr b
+  | inr a => inl a
+  end
+  |}); intros.
+- destruct a; reflexivity.
+- destruct b; reflexivity.
+Defined.
+
 Theorem eq_dec {A B : Type} : (forall x y : A, {x = y} + {x <> y})
   -> T A B -> forall x y : B, {x = y} + {x <> y}.
 Proof.
@@ -282,4 +288,216 @@ assert (forall (n : nat), f <> to0 n).
 - pose proof (to_from0 f).
   rewrite <- H0 in H.
   apply (H (from0 f)). reflexivity.
+Qed.
+
+(** * Subsets *)
+
+Lemma sig_eq (A : Type) (P : A -> Prop) (Pirrel : forall a (p q : P a), p = q)
+  : forall (x y : sig P), proj1_sig x = proj1_sig y -> x = y.
+Proof.
+intros. destruct x, y. simpl in *.
+induction H. rewrite (Pirrel x p p0).
+reflexivity.
+Qed.
+
+Theorem subset {A B : Type} (P : A -> Prop) (Q : B -> Prop)
+  (i : T A B)
+  : (forall a, P a -> Q (to i a))
+  -> (forall b, Q b -> P (from i b))
+  -> (forall a (p q : P a), p = q)
+  -> (forall b (p q : Q b), p = q)
+  -> T (sig P) (sig Q).
+Proof.
+intros PimpQ QimpP Pirrel Qirrel.
+refine (
+  {| to := fun sa => match sa with
+    | exist a pa => exist Q (to i a) (PimpQ a pa)
+    end
+  ;  from := fun sb => match sb with
+    | exist b pb => exist P (from i b) (QimpP b pb)
+    end
+  |}
+); intros inp; destruct inp; simpl;
+  apply sig_eq; try assumption; simpl.
+  apply from_to. apply to_from.
+Defined.
+
+Theorem subsetSelf {A : Type} (P Q : A -> Prop)
+  : (forall a, P a <-> Q a)
+  -> (forall a (p q : P a), p = q)
+  -> (forall b (p q : Q b), p = q)
+  -> T (sig P) (sig Q).
+Proof.
+intros. apply (subset _ _ (Refl A)); try assumption; 
+ intros; simpl; firstorder.
+Defined.
+
+
+Theorem iso_true_subset {A} : T A (sig (fun _ : A => True)).
+Proof. refine (
+  {| to := fun a => exist _ a I
+   ; from := fun ea => let (a, _) := ea in a |}
+); intros.
+reflexivity. destruct b. destruct t. reflexivity.
+Defined.
+
+Theorem iso_false_subset {A} : T Empty_set (sig (fun _ : A => False)).
+Proof. refine (
+  {| to := Empty_set_rect (fun _ => (sig (fun _ : A => False)))
+  ; from := fun p : sig (fun _ => False) => let (x, px) := p in False_rect _ px
+  |}); intros.
+- contradiction.
+- destruct b. contradiction.
+Defined.
+
+Definition subset_sum_distr {A B} {P : A + B -> Prop} :
+  T (sig P) (sig (fun a => P (inl a)) + sig (fun b => P (inr b))).
+Proof.
+refine (
+  {| to := fun (p : sig P) => let (x, px) := p in match x as x'
+  return P x' -> sig (fun a => P (inl a)) + sig (fun b => P (inr b)) with
+  | inl a => fun px' => inl (exist (fun a' => P (inl a')) a px')
+  | inr b => fun px' => inr (exist (fun b' => P (inr b')) b px')
+  end px
+  ; from := fun p => match p with
+  | inl (exist a pa) => exist _ (inl a) pa
+  | inr (exist b pb) => exist _ (inr b) pb
+  end
+  |}
+); intros.
+- destruct a as (x & px). destruct x; reflexivity.
+- destruct b as [s | s]; destruct s; reflexivity.
+Defined.
+
+(** Proof irrelevant-things *)
+
+Inductive inhabited {A : Type} : Prop :=
+  | elem (a : A) : inhabited.
+
+Arguments inhabited : clear implicits.
+
+Require Import ProofIrrelevance.
+
+Theorem inhabited_idempotent {A : Type} :
+  T A (inhabited A * A).
+Proof.
+refine (
+  {| to := fun a => (elem a, a)
+   ; from := fun p => snd p
+  |}
+).
+- intros. reflexivity.
+- intros. destruct b. simpl.
+  replace (elem a) with i by apply proof_irrelevance.
+  reflexivity.
+Defined.
+
+
+Require Import Finite.Equiv.
+
+Import EqualNotations.
+
+Local Open Scope equal. 
+
+Definition toEquiv' {A B : Type} (x : T A B) :
+(forall a : A, to x # from_to x a = to_from x (to x a)) -> Equiv.T A B :=
+  Equiv.Build_T A B (to x) (from x) (from_to x) (to_from x).
+
+Require Import Setoid.
+Lemma toEquiv {A B} (x : T A B) : Equiv.T A B.
+Proof.
+destruct x as [f g eta eps].
+refine (
+  {| Equiv.to := f
+   ; Equiv.from := g
+   ; Equiv.from_to := eta
+   ; Equiv.to_from := fun b =>
+      eq_sym (eps (f (g b)))
+    @ f # eta (g b)
+    @ eps b
+  |}).
+intros.
+pose proof (Equiv.f_equal_homotopy_commutes eta a).
+simpl in H.
+pose proof (Equiv.f_equal_natural (f := fun x => f (g x)) (g := fun x => x) eps
+  (f # eta a)).
+rewrite <- (Equiv.f_equal_compose _ _ _ f g) in H0.
+rewrite (Equiv.f_equal_compose _ _ _ g f) in H0.
+rewrite <- H in H0.
+rewrite !Equiv.f_equal_id in H0.
+rewrite <- Equiv.eq_trans_assoc.
+rewrite <- H0. 
+rewrite Equiv.eq_trans_assoc.
+rewrite Equiv.eq_sym_l.
+rewrite Equiv.eq_trans_id_l. reflexivity.
+Defined.
+
+Definition fromEquiv {A B} (x : Equiv.T A B) : T A B :=
+  {| to := Equiv.to x
+   ; from := Equiv.from x
+   ; to_from := Equiv.to_from x
+   ; from_to := Equiv.from_to x
+  |}.
+
+
+Lemma sigmaProj1_eq : forall {A A'} {to : A -> A'} {from : A' -> A}
+  {a : A}
+  (from_to : from (to a) = a),
+  forall B b,
+         existT B (from (to a)) (Equiv.transport B (eq_sym from_to) b) =
+         existT B a b.
+Proof.
+intros. rewrite from_to0.  simpl. reflexivity.
+Defined.
+
+
+Lemma sigmaProj1_eq2 : forall {A A' B} (i : Equiv.T A A')
+  (a' : A') b,
+       existT (fun a'0 : A' => B (Equiv.from i a'0)) (Equiv.to i (Equiv.from i a'))
+         (Equiv.transport B (eq_sym (Equiv.from_to i (Equiv.from i a'))) b) =
+       existT (fun a'0 : A' => B (Equiv.from i a'0)) a' b. 
+Proof.
+intros. apply EqdepFacts.eq_sigT_iff_eq_dep.
+pose proof (Equiv.lemma422 i) as eps.
+simpl in eps.
+rewrite <- eps. 
+remember (Equiv.to_from i a') as x.
+induction Heqx. rewrite x. reflexivity.
+Qed.
+
+(* This is in fact "true" but, without Axiom K, the construction is a little
+   bit convoluted. It is proved in the HoTT library by transferring
+   isomorphisms to equivalences. *)
+Lemma sigmaPropEquiv {A A' : Type} {B : A -> Type}
+  (iso : Equiv.T A A') 
+  : T (sigT B) (sigT (fun a' => B (Equiv.from iso a'))).
+Proof.
+pose iso as iso'.
+destruct iso.
+unshelve eapply  (
+  {| to := fun p : sigT B => let (a, b) := p in 
+      existT (fun a' => B (from0 a')) (to0 a) (Equiv.transport B (eq_sym (from_to0 a)) b)
+  ; from := fun p : sigT (fun a' => B (from0 a')) => let (a', b) := p in
+      existT B (from0 a') b
+  |}).
+- intros. destruct a. apply sigmaProj1_eq.
+- intros. destruct b as (a' & b). apply (sigmaProj1_eq2 iso' a' b).
+Defined.
+
+Definition sigmaProp {A A' : Type} {B : A -> Type}
+  (iso : T A A')
+  : T (sigT B) (sigT (fun a' => B (from iso a'))).
+Proof.
+pose (@sigmaPropEquiv A A' B (toEquiv iso)).
+simpl in t.
+destruct iso. apply t.
+Defined.
+
+Definition sig_sigT {A : Type} {B : A -> Prop}
+  : T (sig B) (sigT B).
+Proof.
+unshelve eapply (
+  {| to := fun p : sig B => let (a, b) := p in existT _ a b
+   ; from := fun p : sigT B => let (a, b) := p in exist _ a b
+  |}); intros []; simpl; reflexivity.
 Qed.

@@ -1,4 +1,4 @@
-Require Iso.
+Require Finite.Iso.
 Require Fin.
 
 Set Asymmetric Patterns.
@@ -8,7 +8,7 @@ Set Asymmetric Patterns.
     easier to work with. *)
 Fixpoint Fin (n : nat) : Set := match n with
   | 0 => Empty_set
-  | S n' => (unit + Fin n')%type
+  | S n' => option (Fin n')
   end.
 
 (** Fin and Fin.t are isomorphic for every size. *)
@@ -22,19 +22,19 @@ induction n.
 refine (
 {| Iso.to := fun x => (match x in Fin.t n'
   return (S n = n') -> Fin (S n) with
-   | Fin.F1 _ => fun _ => inl tt
-   | Fin.FS n' x' => fun pf => inr (Iso.to IHn (eq_rect n' Fin.t x' _ (eq_sym (eq_add_S _ _ pf))))
+   | Fin.F1 _ => fun _ => None
+   | Fin.FS n' x' => fun pf => Some (Iso.to IHn (eq_rect n' Fin.t x' _ (eq_sym (eq_add_S _ _ pf))))
    end) eq_refl
  ; Iso.from := fun x => match x with
-   | inl tt => Fin.F1
-   | inr x' => Fin.FS (Iso.from IHn x')
+   | None => Fin.F1
+   | Some x' => Fin.FS (Iso.from IHn x')
    end
 |}).
 intros a.
 Require Import Program.
 dependent destruction a; simpl.
 reflexivity. rewrite Iso.from_to. reflexivity.
-intros b. destruct b. destruct u. reflexivity.
+intros b. destruct b. 2: reflexivity.
   simpl. rewrite Iso.to_from. reflexivity.
 Grab Existential Variables.
 intros bot. contradiction.
@@ -52,11 +52,27 @@ refine (
 |}).
 reflexivity.
 intros b. destruct b. reflexivity. contradiction.
-Qed.
+Defined.
+
+Lemma option_Succ (A : Type) : Iso.T (option A) (unit + A).
+Proof.
+unshelve eapply (
+{| Iso.to := fun x : option A => match x with
+  | None => inl tt
+  | Some y => inr y
+  end
+ ; Iso.from := fun y : unit + A => match y with
+  | inl tt => None
+  | inr x => Some x
+  end
+|}); intros []; try reflexivity.
+destruct u. reflexivity.
+Defined.
 
 Fixpoint split (m : nat)
   : forall (n : nat), Fin.t (m + n) -> (Fin.t m + Fin.t n).
-refine (
+Proof.
+unshelve eapply (
   match m return (forall (n : nat), Fin.t (m + n) -> (Fin.t m + Fin.t n)) with
   | 0 => fun _ => inr
   | S m' => fun n x => (match x as x0 in Fin.t k 
@@ -188,16 +204,20 @@ Theorem finPow : forall {e b : nat},
 Proof.
 intros e. induction e; intros n; simpl.
 - eapply Iso.Trans. apply finIso. simpl. eapply Iso.Trans.
+  eapply option_Succ. eapply Iso.Trans.
   eapply Iso.Sym. apply botNull. eapply Iso.Trans. Focus 2.
   eapply Iso.FuncCong. eapply Iso.Sym. apply finIso. apply Iso.Refl.
   simpl. apply Iso.Sym. apply Iso.FFunc.
 - eapply Iso.Trans. eapply Iso.Sym. apply finMult.
   eapply Iso.Trans. Focus 2. eapply Iso.FuncCong.
   eapply Iso.Sym. apply finIso. apply Iso.Refl.
-  simpl. eapply Iso.Trans. Focus 2. eapply Iso.Sym. eapply Iso.PlusFunc.
+  simpl. eapply Iso.Trans. Focus 2. eapply Iso.Sym.
+  eapply Iso.Trans. eapply Iso.FuncCong. eapply option_Succ.
+  eapply Iso.Refl. eapply Iso.Refl. apply Iso.Sym.
+  eapply Iso.PlusFunc.
   apply Iso.TFunc. eapply Iso.Trans. eapply Iso.FuncCong.
   eapply Iso.Sym. apply finIso. apply Iso.Refl. eapply Iso.Sym.
-  apply IHe. apply Iso.Refl.
+  apply IHe.
 Qed.
 
 (** A universe of codes for finite types. *)
@@ -223,24 +243,24 @@ Fixpoint ty (t : U) : Set := match t with
 
 (** For every code for a finite type, we give its cardinality as
     a natural number. *)
-Fixpoint card (t : U) : nat := match t with
+Fixpoint Ucard (t : U) : nat := match t with
   | U0 => 0
   | U1 => 1
-  | UPlus a b => card a + card b
-  | UTimes a b => card a * card b
-  | UFunc a b => pow (card b) (card a)
+  | UPlus a b => Ucard a + Ucard b
+  | UTimes a b => Ucard a * Ucard b
+  | UFunc a b => pow (Ucard b) (Ucard a)
   | UFint n => n
   | UFin n => n
   end.
     
 (** Each type in the finite universe is isomorphic to the Fin.t
     family whose size is determined by the cardinality function above. *)
-Theorem finChar (t : U) : Iso.T (ty t) (Fin.t (card t)).
+Theorem finChar (t : U) : Iso.T (ty t) (Fin.t (Ucard t)).
 Proof.
 induction t; simpl.
 - apply Iso.Sym. apply (finIso 0).
 - apply Iso.Sym. apply (@Iso.Trans _ (Fin 1)). apply (finIso 1).
-  apply Iso.Sym. apply botNull.
+  simpl. eapply Iso.Trans. apply option_Succ. eapply Iso.Sym. apply botNull.
 - eapply Iso.Trans. eapply Iso.PlusCong. eassumption.
   eassumption.
   apply finPlus.
@@ -254,22 +274,28 @@ Qed.
 
 (** A type for evidence that a type is finite: a type is finite if
     any of the following hold:
-    a) it is unit
-    b) it is Empty_set
+    a) it is True
+    b) it is False
     c) it is a sum of finite types
     d) it is isomorphic to a finite type
 
     This is not minimal. We could have replaced b) and c) with the condition
-    e) it is the sum of unit with a finite type
+    e) it is the sum of True with a finite type
        (this is the analog of Successor)
     But this definition is simple so I like it.
 *)
 
 Inductive T : Type -> Type :=
   | F0 : T Empty_set
-  | FS : forall {A}, T A -> T (unit + A)
+  | FS : forall {A}, T A -> T (option A)
   | FIso : forall {A B}, T A -> Iso.T A B -> T B
 .
+
+Fixpoint card {A} (fin : T A) := match fin with
+  | F0 => 0
+  | FS _ n => S (card n)
+  | FIso _ _ x iso => card x
+  end.
 
 Definition fin (n : nat) : T (Fin.t n).
 Proof. eapply FIso. Focus 2. eapply Iso.Sym. eapply finIso.
@@ -284,15 +310,18 @@ eapply FIso. Focus 2. eapply Iso.Sym. apply finChar.
 apply fin.
 Qed.
 
-Definition iso {A : Type} : T A -> sigT (fun n => Iso.T A (Fin.t n)).
+Definition iso {A : Type} (fin : T A) : Iso.T A (Fin.t (card fin)).
 Proof.
-intros. induction X.
--  exists 0. apply (finChar U0).
-- destruct IHX. exists (S x). apply Iso.Sym. eapply Iso.Trans. 
-  apply finIso. simpl. apply Iso.PlusCong. apply Iso.Refl.
+induction fin.
+-  apply (finChar U0).
+- apply Iso.Sym. eapply Iso.Trans. 
+  apply finIso. simpl. eapply Iso.Trans. 
+  eapply option_Succ. eapply Iso.Trans. 
+  Focus 2. eapply Iso.Sym. eapply option_Succ.
+apply Iso.PlusCong. apply Iso.Refl.
   eapply Iso.Trans. eapply Iso.Sym. apply finIso. apply Iso.Sym.
   assumption.
-- destruct IHX. exists x. eapply Iso.Trans. eapply Iso.Sym. eassumption.
+- eapply Iso.Trans. eapply Iso.Sym. eassumption.
   assumption. 
 Qed.
 
@@ -300,10 +329,9 @@ Definition true : T unit := finU U1.
 
 Definition plus {A B : Type} (fa : T A) (fb : T B) : T (A + B).
 Proof.
-destruct (iso fa), (iso fb).
-eapply (@FIso (Fin.t (x + x0))). apply (finU (UFint (x + x0))).
+eapply (@FIso (Fin.t (card fa + card fb))). apply (finU (UFint _)).
 eapply Iso.Trans. eapply Iso.Sym. apply finPlus.
-eapply Iso.PlusCong; eapply Iso.Sym; eassumption.
+eapply Iso.PlusCong; eapply Iso.Sym; apply iso.
 Qed.
 
 Lemma finiteSig {A : Type} (fa : T A)
@@ -313,11 +341,16 @@ Lemma finiteSig {A : Type} (fa : T A)
 Proof.
 induction fa; intros b fb.
 - exists Empty_set. split. constructor. apply Iso.FSig.
-- pose proof (IHfa (fun x => b (inr x)) (fun x => fb (inr x))).
+- pose proof (IHfa (fun x => b (Some x)) (fun x => fb (Some x))).
   destruct X. destruct p.
-  exists (b (inl tt) + x)%type. constructor. apply plus. apply fb.
+  exists (b None + x)%type. constructor. apply plus. apply fb. 
   assumption.
-  apply Iso.PlusSig. apply (@Iso.TSig (fun x => b (inl x))). 
+  eapply Iso.Trans.
+  eapply (Iso.sigmaProp (option_Succ A)).
+  apply Iso.PlusSig.
+  simpl. eapply (@Iso.TSig (fun x0 => b match x0 with
+                     | () => None
+                     end)).
   assumption.
 - pose (Iso.Sym t).
   pose proof (IHfa (fun x => b (Iso.from t0 x))
@@ -325,14 +358,11 @@ induction fa; intros b fb.
   destruct X. destruct p.
   exists x. split. assumption.
   eapply Iso.Trans. Focus 2. apply t2.
-  admit.
-  (* Here we need Iso.sigmaProp, which we have yet to prove,
-     so we cannot finish the proof here. *)
-  (*apply Iso.sigmaProp.*)
-Admitted.
+  apply Iso.sigmaProp.
+Defined.
 
 (** Sigma types are closed under finiteness. *)
-Theorem sig {A : Type} {B : A -> Type} 
+Theorem Sig {A : Type} {B : A -> Type} 
   : T A 
   -> (forall (x : A), T (B x))
   -> T (sigT B).
@@ -349,7 +379,7 @@ Theorem times {A B : Type} : T A -> T B -> T (A * B).
 Proof.
 intros fa fb.
 eapply FIso. Focus 2. eapply Iso.Sym. eapply Iso.sigTimes.
-apply sig. assumption. apply (fun _ => fb).
+apply Sig. assumption. apply (fun _ => fb).
 Defined.
 
 Lemma finiteMapped {A : Type} (fa : T A)
@@ -360,8 +390,10 @@ induction fa.
 - intros B fb.
   destruct (IHfa B fb).
   exists (B * x)%type.
-  destruct p.
-  apply (times fb t , Iso.PlusFunc Iso.TFunc t0).
+  destruct p. split. apply (times fb t).
+  eapply Iso.Trans. eapply Iso.FuncCong.
+  eapply option_Succ. apply Iso.Refl.
+  apply (Iso.PlusFunc Iso.TFunc t0).
 - intros B1 fb.
   destruct (IHfa B1 fb).
   destruct p.
@@ -392,6 +424,50 @@ Theorem eq_dec {A : Type} : T A -> forall a b : A, {a = b} + {a <> b}.
 Proof.
 intros finite.
 induction finite; intros; try (decide equality).
-- destruct a0, u; auto.
 - eapply Iso.eq_dec; eassumption.
 Qed.
+
+Fixpoint elementsV {A} (fin : T A) : Vector.t A (card fin) := 
+  match fin in T A' return Vector.t A' (card fin) with
+  | F0 => Vector.nil Empty_set
+  | FS _ n => Vector.cons _ (None) _ (Vector.map Some (elementsV n))
+  | FIso _ _ x iso => let xs := elementsV x in
+     Vector.map (Iso.to iso) xs
+  end.
+
+
+Theorem fin_dec_subset {A} (fin : T A) {P : A -> Prop}
+  : (forall a, {P a} + {~ P a}) -> T (sig P).
+Proof.
+generalize dependent P. induction fin; intros P decP.
+- eapply FIso. apply F0.
+  eapply Iso.Trans. apply Iso.iso_true_subset. 
+  apply Iso.subsetSelf; firstorder. destruct a.
+  destruct b.
+- eapply FIso. Focus 2. eapply Iso.Sym.
+  eapply Iso.Trans.
+  eapply Iso.sig_sigT. eapply Iso.Trans. eapply (Iso.sigmaProp (option_Succ A)).
+  eapply Iso.Sym. eapply Iso.Trans. 2: eapply Iso.sig_sigT.
+  eapply Iso.Sym. apply Iso.subset_sum_distr.
+  destruct (decP None).
+  + eapply FIso. Focus 2.
+    eapply Iso.PlusCong. apply (Iso.subsetSelf (fun _ => True)); intros; auto.
+    destruct a. tauto. destruct p0, q. reflexivity.
+    apply proof_irrelevance. apply Iso.Refl.
+    eapply FIso. Focus 2. eapply Iso.PlusCong.
+    apply Iso.iso_true_subset. apply Iso.Refl.
+    eapply FIso. Focus 2. eapply option_Succ.
+    apply FS. apply IHfin. intros. apply decP.  
+  + eapply FIso. Focus 2.
+    eapply Iso.PlusCong. apply (Iso.subsetSelf (fun _ => False)); intros; auto.
+    destruct a. tauto. contradiction. destruct b. simpl in p, q. congruence.
+    apply Iso.Refl. eapply FIso. Focus 2. eapply Iso.PlusCong.
+    apply Iso.iso_false_subset. apply Iso.Refl.
+    eapply FIso. Focus 2.
+    eapply Iso.Trans. Focus 2. apply Iso.PlusComm.
+    apply botNull. apply IHfin. intros; apply decP.
+- eapply FIso. apply (IHfin (fun a => P (Iso.to t a))). 
+  intros. apply decP. apply Iso.subset with t; firstorder.
+  rewrite Iso.to_from. assumption. apply proof_irrelevance.
+  apply proof_irrelevance.
+Defined.
