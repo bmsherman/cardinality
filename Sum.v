@@ -1,74 +1,60 @@
-Require Import Finite finite_iso.
-
-Lemma injective_plus_Some {A B} (i : Iso.T (option A) (option B))
- (HN : Iso.to i None = None)
-  : forall x : A, Some (Iso.to (injective_plus i) x) = Iso.to i (Some x).
-Proof.
-unfold injective_plus.
-intros.
-Abort. 
-
+Require Import Finite finite_iso
+  Coq.Lists.List
+  Coq.Sorting.Permutation.
  
-Section Monoid.
+Section CommutativeSemiGroup.
 
-Variable A : Type.
-Variable zero : A.
-Variable plus : A -> A -> A.
+Variable R : Type.
+Variable zero : R.
+Variable plus : R -> R -> R.
 
 Local Infix "+" := plus.
 
-Axiom plus_comm : forall x y : A, x + y = y + x.
+Axiom plus_comm : forall x y : R, x + y = y + x.
 Axiom plus_assoc : forall x y z, x + (y + z) = (x + y) + z.
-Axiom zero_l : forall x, zero + x = x.
+
+Lemma sum_list_perm_invariant : forall (xs ys : list R),
+  Permutation xs ys 
+  -> fold_right plus zero xs = fold_right plus zero ys.
+Proof.
+intros. induction H; simpl.
+- reflexivity.
+- rewrite IHPermutation; reflexivity.
+- rewrite !plus_assoc. rewrite (plus_comm y x). reflexivity.
+- etransitivity; eassumption.
+Qed.
+
+Fixpoint sum_finite {A} (F : Finite.T A) 
+  : (A -> R) -> R := match F with
+  | Finite.F0 => fun _ => zero
+  | Finite.FS F' => fun f => f None + sum_finite F' (fun x => f (Some x))
+  | Finite.FIso F' iso => fun f =>
+     sum_finite F' (fun i => f (Iso.to iso i))
+  end.
 
 Lemma plus_r : forall x y y', y = y' -> x + y = x + y'.
 Proof.
 intros. subst. reflexivity.
 Qed.
 
-Fixpoint sum_finite {n : nat} : (Fin n -> A) -> A := match n with
-  | 0 => fun _ => zero
-  | S n' => fun f => f None + sum_finite (fun x => f (Some x))
-  end.
-
-Definition leA (x y : A) : Type :=
-  { z : A | x + z = y }.
-
-Infix "<=" := leA.
-
-Lemma leA_trans (x y z : A) : x <= y -> y <= z -> x <= z.
+Lemma sum_finite_list_same {A} (F : Finite.T A) (f : A -> R)
+  : sum_finite F f = fold_right plus zero
+  (List.map f (Finite.elements F)).
 Proof.
-intros. destruct X, X0.
-exists (x0 + x1). subst. apply plus_assoc.
+induction F; simpl; intros.
+- reflexivity.
+- apply plus_r. rewrite List.map_map. apply IHF.
+- rewrite List.map_map. apply IHF. 
 Qed.
 
-Lemma sum_finite_le {m n : nat} (i : Fin m -> Fin n)
-  (i_mono : forall x y, i x = i y -> x = y)
-  (f : Fin n -> A)
-  : sum_finite (fun x => f (i x)) <= sum_finite f.
+Lemma sum_finite_well_def {A} (F1 F2 : Finite.T A)
+  (f : A -> R)
+  : sum_finite F1 f = sum_finite F2 f.
 Proof.
-Abort.
+rewrite !sum_finite_list_same.
+apply sum_list_perm_invariant.
+apply Permutation_map.
+apply Finite.elements_Permutation.
+Qed.
 
-Require Import FunctionalExtensionality.
-
-Lemma sum_finite_well_def {m n : nat} (H : Iso.T (Fin n) (Fin m))
-  (f : Fin m -> A)
-  : sum_finite f = sum_finite (fun x => f (Iso.to H x)).
-Proof.
-assert (m = n). apply fin_iso.
-apply fin_iso_to_fint. apply Iso.Sym. assumption.
-induction H0.
-induction m.
-- simpl. reflexivity.
-- simpl in H. simpl.
-  destruct (Iso.to H (@None _)) eqn:fN;
-    setoid_rewrite fN.
-  + admit.
-  + apply plus_r. 
-    specialize (IHm (injective_plus H) (fun x => f (Some x))).
-    simpl in IHm. rewrite IHm.
-
-    unfold injective_plus.
-Abort.
-
-End Monoid.
+End CommutativeSemiGroup.
