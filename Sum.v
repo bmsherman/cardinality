@@ -24,12 +24,17 @@ intros. induction H; simpl.
 - etransitivity; eassumption.
 Qed.
 
-Fixpoint sum_finite {A} (F : Finite.T A) 
+Fixpoint sum_Fin {n : nat} : (Finite.Fin n -> R) -> R := match n with
+  | 0 => fun f => zero
+  | S n' => fun f => f None + sum_Fin (fun x => f (Some x))
+  end.
+
+Fixpoint sum_finiteT {A} (F : Finite.T A) 
   : (A -> R) -> R := match F with
   | Finite.F0 => fun _ => zero
-  | Finite.FS F' => fun f => f None + sum_finite F' (fun x => f (Some x))
+  | Finite.FS F' => fun f => f None + sum_finiteT F' (fun x => f (Some x))
   | Finite.FIso F' iso => fun f =>
-     sum_finite F' (fun i => f (Iso.to iso i))
+     sum_finiteT F' (fun i => f (Iso.to iso i))
   end.
 
 Lemma plus_r : forall x y y', y = y' -> x + y = x + y'.
@@ -37,8 +42,8 @@ Proof.
 intros. subst. reflexivity.
 Qed.
 
-Lemma sum_finite_list_same {A} (F : Finite.T A) (f : A -> R)
-  : sum_finite F f = fold_right plus zero
+Lemma sum_finiteT_list_same {A} (F : Finite.T A) (f : A -> R)
+  : sum_finiteT F f = fold_right plus zero
   (List.map f (Finite.elements F)).
 Proof.
 induction F; simpl; intros.
@@ -47,14 +52,25 @@ induction F; simpl; intros.
 - rewrite List.map_map. apply IHF. 
 Qed.
 
-Lemma sum_finite_well_def {A} (F1 F2 : Finite.T A)
+Lemma sum_finiteT_well_def {A} (F1 F2 : Finite.T A)
   (f : A -> R)
-  : sum_finite F1 f = sum_finite F2 f.
+  : sum_finiteT F1 f = sum_finiteT F2 f.
 Proof.
-rewrite !sum_finite_list_same.
+rewrite !sum_finiteT_list_same.
 apply sum_list_perm_invariant.
 apply Permutation_map.
 apply Finite.elements_Permutation.
+Qed.
+
+Lemma sum_finiteT_extensional {A} {F : Finite.T A}
+  (f f' : A -> R)
+  (H : forall a, f a = f' a)
+  : sum_finiteT F f = sum_finiteT F f'.
+Proof.
+induction F; simpl.
+- reflexivity.
+- f_equal; auto.
+- auto.
 Qed.
 
 End CommutativeSemiGroup.

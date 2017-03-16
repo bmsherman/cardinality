@@ -302,7 +302,7 @@ Proof. eapply FIso. Focus 2. eapply Iso.Sym. eapply finIso.
 induction n; simpl.
 - apply F0.
 - apply FS. assumption.
-Qed.
+Defined.
 
 Definition finU (A : U) : T (ty A).
 Proof. 
@@ -555,14 +555,18 @@ intros; split; intros; apply elements_Full.
 Qed.
 
 (* An alternative characterization of finite types *)
-Inductive T' {A : Type} : Type := 
-  FI : forall n, Iso.T A (Fin.t n) -> T'.
+Record T' {A : Type} : Type := FI
+  { Tcard : nat
+  ; Tiso : Iso.T A (Fin.t Tcard)
+  }.
 
 Arguments T' : clear implicits.
 
 Definition toT' {A} (fin : T A) : T' A
-  := FI (card fin) (iso fin).
+  := FI _ (card fin) (iso fin).
 
-Definition fromT' {A} (fn : T' A) : T A := match fn with
-  FI n i => FIso (fin n) (Iso.Sym i)
-  end.
+Definition fromT' {A} (fn : T' A) : T A := 
+  FIso (fin (Tcard fn)) (Iso.Sym (Tiso fn)).
+
+Class TC (A : Type) := {TCfin : T A}.
+
