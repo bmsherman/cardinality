@@ -517,6 +517,26 @@ intros. induction xs; simpl.
   apply IHxs. assumption.
 Qed.
 
+Lemma iso_to_NoDup {A B : Type} (t : Iso.T A B)
+  (xs : list A)
+  (H : NoDup xs)
+  : NoDup (map (Iso.to t) xs).
+Proof.
+apply injective_NoDup. intros. 
+rewrite <- (Iso.from_to t x), <- (Iso.from_to t y).
+rewrite H0. reflexivity.
+assumption.
+Qed.
+
+Lemma iso_from_NoDup {A B : Type} (t : Iso.T A B)
+  (xs : list B)
+  (H : NoDup xs)
+  : NoDup (map (Iso.from t) xs).
+Proof.
+apply (iso_to_NoDup (Iso.Sym t) xs H).
+Qed.
+
+
 Lemma elements_NoDup : forall A (x : T A),
   NoDup (elements x).
 Proof.
@@ -529,10 +549,7 @@ intros. induction x; simpl; intros.
   apply injective_NoDup. intros; congruence.
   unfold elements in IHx.
   apply IHx.
-- apply injective_NoDup. intros. 
-  rewrite <- (Iso.from_to t x0), <- (Iso.from_to t y).
-  rewrite H. reflexivity.
-  apply IHx.
+- apply iso_to_NoDup. assumption.
 Qed.
 
 Lemma elements_Full : forall A (x : T A) (a : A),
@@ -557,16 +574,77 @@ Qed.
 (* An alternative characterization of finite types *)
 Record T' {A : Type} : Type := FI
   { Tcard : nat
-  ; Tiso : Iso.T A (Fin.t Tcard)
+  ; Tiso : Iso.T A (Fin Tcard)
   }.
 
 Arguments T' : clear implicits.
 
 Definition toT' {A} (fin : T A) : T' A
-  := FI _ (card fin) (iso fin).
+  := FI _ (card fin) (Iso.Trans (iso fin) (finIso _)).
 
-Definition fromT' {A} (fn : T' A) : T A := 
-  FIso (fin (Tcard fn)) (Iso.Sym (Tiso fn)).
+Definition fromT' {A} (fn : T' A) : T A.
+Proof.
+unshelve econstructor.
+2: exact (fin (Tcard fn)).
+eapply Iso.Trans.
+2: apply (Iso.Sym (Tiso fn)).
+apply finIso.
+Defined.
 
 Class TC (A : Type) := {TCfin : T A}.
 
+Fixpoint elements_Fin (n : nat) : list (Fin n) := match n with
+  | 0 => []
+  | S n' => None :: List.map Some (elements_Fin n')
+  end.
+
+Definition elements' {A} (fin : T' A) : list A :=
+  List.map (Iso.from (Tiso fin)) (elements_Fin (Tcard fin)).
+
+
+Lemma elements_Fin_NoDup (n : nat) :
+  NoDup (elements_Fin n).
+Proof.
+intros. induction n; simpl; intros. 
+- constructor.
+- constructor. unfold not. intros contra. 
+  apply in_map_iff in contra.
+  destruct contra as (x0 & contra & _).
+  congruence. 
+  apply injective_NoDup. intros; congruence.
+  assumption.
+Qed.
+
+Lemma elements_Fin_Full (n : nat) (x : Fin n) :
+  In x (elements_Fin n).
+Proof.
+intros. induction n.
+- contradiction.
+- destruct x.
+  + right. apply in_map. apply IHn.
+  + left. reflexivity.
+Qed.
+
+Lemma elements'_NoDup : forall A (x : T' A),
+  NoDup (elements' x).
+Proof.
+intros. induction x; simpl.
+unfold elements'. apply iso_from_NoDup.
+apply elements_Fin_NoDup.
+Qed.
+
+Lemma elements'_Full : forall A (x : T' A) (a : A),
+  In a (elements' x).
+Proof.
+intros. induction x.
+unfold elements'.
+rewrite <- (Iso.from_to Tiso0 a). apply in_map.
+simpl. apply elements_Fin_Full.
+Qed.
+
+Lemma elements'_Permutation : forall A (x1 x2 : T' A),
+  Permutation (elements' x1) (elements' x2).
+Proof.
+intros. apply NoDup_Permutation; try apply elements'_NoDup.
+intros; split; intros; apply elements'_Full.
+Qed.

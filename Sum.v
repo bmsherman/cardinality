@@ -4,7 +4,7 @@ Require Import Finite finite_iso
  
 Section CommutativeSemiGroup.
 
-Variable R : Type.
+Context {R : Type}.
 Variable zero : R.
 Variable plus : R -> R -> R.
 
@@ -37,6 +37,9 @@ Fixpoint sum_finiteT {A} (F : Finite.T A)
      sum_finiteT F' (fun i => f (Iso.to iso i))
   end.
 
+Definition sum_finiteT' {A} (F : Finite.T' A)
+  (f : A -> R) : R := sum_Fin (fun x => f (Iso.from (Tiso F) x)).
+
 Lemma plus_r : forall x y y', y = y' -> x + y = x + y'.
 Proof.
 intros. subst. reflexivity.
@@ -50,6 +53,24 @@ induction F; simpl; intros.
 - reflexivity.
 - apply plus_r. rewrite List.map_map. apply IHF.
 - rewrite List.map_map. apply IHF. 
+Qed.
+
+Lemma sum_Fin_list_same (n : nat) (f : Fin n -> R)
+  : sum_Fin f = fold_right plus zero (List.map f (elements_Fin n)).
+Proof.
+induction n; simpl.
+- reflexivity.
+- apply plus_r. rewrite List.map_map.
+  apply IHn.
+Qed.
+
+Lemma sum_finiteT'_list_same {A} (F : Finite.T' A) (f : A -> R)
+  : sum_finiteT' F f = fold_right plus zero
+  (List.map f (Finite.elements' F)).
+Proof.
+unfold elements', sum_finiteT'.
+rewrite List.map_map.
+apply sum_Fin_list_same.
 Qed.
 
 Lemma sum_finiteT_well_def {A} (F1 F2 : Finite.T A)
