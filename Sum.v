@@ -13,15 +13,42 @@ Local Infix "+" := plus.
 Axiom plus_comm : forall x y : R, x + y = y + x.
 Axiom plus_assoc : forall x y z, x + (y + z) = (x + y) + z.
 
+Definition sum_list : list R -> R := fold_right plus zero.
+
 Lemma sum_list_perm_invariant : forall (xs ys : list R),
   Permutation xs ys 
-  -> fold_right plus zero xs = fold_right plus zero ys.
+  -> sum_list xs = sum_list ys.
 Proof.
 intros. induction H; simpl.
 - reflexivity.
 - rewrite IHPermutation; reflexivity.
 - rewrite !plus_assoc. rewrite (plus_comm y x). reflexivity.
 - etransitivity; eassumption.
+Qed.
+
+Axiom plus_zero_l : forall x, zero + x = x.
+
+Lemma plus_zero_r : forall x, x + zero = x.
+Proof.
+intros x. rewrite plus_comm. apply plus_zero_l.
+Qed.
+
+Lemma fold_right_sum_list (xs : list R) (c : R)
+  : fold_right plus c xs = c + sum_list xs.
+Proof.
+induction xs; simpl. 
+- symmetry. apply plus_zero_r.
+- rewrite IHxs. rewrite !plus_assoc.
+  f_equal. apply plus_comm.
+Qed.
+
+Lemma sum_list_app (xs ys : list R)
+  : sum_list (xs ++ ys) = sum_list xs + sum_list ys.
+Proof.
+unfold sum_list.
+rewrite fold_right_app.
+rewrite fold_right_sum_list.
+apply plus_comm.
 Qed.
 
 Fixpoint sum_Fin {n : nat} : (Finite.Fin n -> R) -> R := match n with
@@ -46,8 +73,7 @@ intros. subst. reflexivity.
 Qed.
 
 Lemma sum_finiteT_list_same {A} (F : Finite.T A) (f : A -> R)
-  : sum_finiteT F f = fold_right plus zero
-  (List.map f (Finite.elements F)).
+  : sum_finiteT F f = sum_list (List.map f (Finite.elements F)).
 Proof.
 induction F; simpl; intros.
 - reflexivity.
@@ -56,7 +82,7 @@ induction F; simpl; intros.
 Qed.
 
 Lemma sum_Fin_list_same (n : nat) (f : Fin n -> R)
-  : sum_Fin f = fold_right plus zero (List.map f (elements_Fin n)).
+  : sum_Fin f = sum_list (List.map f (elements_Fin n)).
 Proof.
 induction n; simpl.
 - reflexivity.
@@ -64,9 +90,27 @@ induction n; simpl.
   apply IHn.
 Qed.
 
+Lemma sum_list_concat (xs : list (list R))
+  : sum_list (concat xs)
+  = sum_list (List.map (sum_list) xs).
+Proof.
+induction xs; simpl.
+- reflexivity.
+- rewrite sum_list_app. f_equal.
+  apply IHxs.
+Qed.
+
+Lemma sum_list_dep {A B} (xs : list A) (f : A -> list B) (v : A * B -> R)
+  : sum_list (map (fun a => sum_list (map (fun b => v (a, b)) (f a))) xs)
+  = sum_list (flat_map (fun a => map (fun b => v (a, b)) (f a)) xs).
+Proof.
+induction xs; simpl.
+- reflexivity.
+- rewrite IHxs. rewrite sum_list_app. reflexivity.
+Qed.
+
 Lemma sum_finiteT'_list_same {A} (F : Finite.T' A) (f : A -> R)
-  : sum_finiteT' F f = fold_right plus zero
-  (List.map f (Finite.elements' F)).
+  : sum_finiteT' F f = sum_list (List.map f (Finite.elements' F)).
 Proof.
 unfold elements', sum_finiteT'.
 rewrite List.map_map.
@@ -83,6 +127,16 @@ apply Permutation_map.
 apply Finite.elements_Permutation.
 Qed.
 
+Lemma sum_finiteT'_well_def {A} (F1 F2 : Finite.T' A)
+  (f : A -> R)
+  : sum_finiteT' F1 f = sum_finiteT' F2 f.
+Proof.
+rewrite !sum_finiteT'_list_same.
+apply sum_list_perm_invariant.
+apply Permutation_map.
+apply Finite.elements'_Permutation.
+Qed.
+
 Lemma sum_finiteT_extensional {A} {F : Finite.T A}
   (f f' : A -> R)
   (H : forall a, f a = f' a)
@@ -92,6 +146,66 @@ induction F; simpl.
 - reflexivity.
 - f_equal; auto.
 - auto.
+Qed.
+
+Lemma sum_Fin_extensional {n : nat}
+  (f f' : Fin n -> R)
+  (H : forall a, f a = f' a)
+  : sum_Fin f = sum_Fin f'.
+Proof.
+induction n; simpl.
+- reflexivity.
+- f_equal; auto.
+Qed.
+
+Lemma sum_finiteT'_extensional {A} {F : Finite.T' A}
+  (f f' : A -> R)
+  (H : forall a, f a = f' a)
+  : sum_finiteT' F f = sum_finiteT' F f'.
+Proof.
+induction F. apply sum_Fin_extensional.
+simpl. intros. apply H.
+Qed.
+
+Lemma sum_Fin_Sum {n k} (f : Fin (n + k) -> R)
+  : sum_Fin f = sum_Fin (fun i => f (Iso.to finPlus1 (inl i)))
+              + sum_Fin (fun i => f (Iso.to finPlus1 (inr i))).
+Proof.
+induction n; simpl.
+- rewrite plus_zero_l. reflexivity.
+- rewrite <- plus_assoc. f_equal.
+  apply IHn.
+Qed.
+
+Lemma sum_Fin_Prod {n k} (f : Fin (n * k) -> R)
+  : sum_Fin f = sum_Fin (fun i => sum_Fin (fun j => f (Iso.to finMult1 (i, j)))).
+Proof.
+induction n; simpl.
+- reflexivity. 
+- induction k; simpl.
+  + rewrite plus_zero_l. rewrite IHn. simpl. reflexivity. 
+  + rewrite <- plus_assoc. f_equal.
+    rewrite sum_Fin_Sum. f_equal.
+    rewrite IHn. reflexivity.
+Qed.
+
+Definition T'_Prod {A B} (FA : Finite.T' A) (FB : Finite.T' B)
+  : Finite.T' (A * B).
+Proof.
+exists (Tcard FA * Tcard FB).
+eapply Iso.Trans. eapply Iso.TimesCong.
+apply FA. apply FB. apply finMult1.
+Defined.
+
+Lemma sum_FiniteT'_Prod {A B} {FA : Finite.T' A} {FB : Finite.T' B}
+  (f : A * B -> R)
+  : sum_finiteT' (T'_Prod FA FB) f
+  = sum_finiteT' FA (fun a => sum_finiteT' FB (fun b => f (a, b))).
+Proof.
+unfold sum_finiteT'. simpl.
+rewrite sum_Fin_Prod. apply sum_Fin_extensional. 
+intros i. apply sum_Fin_extensional. intros j.
+simpl. rewrite Iso.from_to. reflexivity.
 Qed.
 
 End CommutativeSemiGroup.

@@ -69,7 +69,7 @@ unshelve eapply (
 destruct u. reflexivity.
 Defined.
 
-Fixpoint split (m : nat)
+Fixpoint splitt (m : nat)
   : forall (n : nat), Fin.t (m + n) -> (Fin.t m + Fin.t n).
 Proof.
 unshelve eapply (
@@ -84,14 +84,180 @@ unshelve eapply (
 simpl in pf.
 apply eq_add_S in pf.
 rewrite pf in x'.
-refine (match split m' n x' with
+refine (match splitt m' n x' with
   | inl a => inl (Fin.FS a)
   | inr b => inr b
   end).
 Defined.
 
-Lemma splitL : forall {m n : nat} {x : Fin.t m},
-  split m n (Fin.L n x) = inl x.
+Definition split (m : nat)
+  : forall (n : nat), Fin (m + n) -> (Fin m + Fin n).
+Proof.
+induction m; simpl.
+- intros. right. assumption.
+- intros. destruct H.
+  destruct (IHm _ f).
+  + left. apply Some. assumption.
+  + right. assumption.
+  + left. apply None.
+Defined.
+
+Definition FinL {m n} : Fin m -> Fin (m + n).
+Proof.
+induction m; simpl; intros x.
+- induction x.
+- induction x.
+  + apply Some. apply IHm. assumption.
+  + apply None.
+Defined.
+
+Definition FinR {m n} : Fin m -> Fin (n + m).
+Proof.
+induction n; simpl; intros x.
+- assumption.
+- apply Some. apply IHn. assumption.
+Defined.
+
+Lemma splitL : forall {m n : nat} {x : Fin m},
+  split m n (FinL x) = inl x.
+Proof.
+intros m. induction m; intros n x.
+- induction x.
+- induction x; simpl. 
+  + rewrite IHm. reflexivity. 
+  + reflexivity.
+Qed.
+
+Lemma splitR : forall {m n : nat} {x : Fin n},
+  split m n (FinR x) = inr x.
+Proof.
+intros m. induction m; intros n x; simpl.
+- reflexivity.
+- rewrite (IHm n x). reflexivity.
+Qed.
+
+Lemma splitInj : forall {m n : nat} {x y : Fin (m + n)},
+  split m n x = split m n y -> x = y.
+Proof.
+intros m; induction m; intros n x y Heq.
+- inversion Heq. reflexivity.
+- induction x; induction y.
+  + apply f_equal. simpl in Heq. apply IHm.
+    destruct (split m n a) eqn:sx;
+    destruct (split m n a0) eqn:sy.
+    apply f_equal; congruence.
+    congruence. congruence. congruence.
+  + simpl in Heq. destruct (split m n a); congruence.
+  + simpl in Heq. destruct (split m n a); congruence.
+  + reflexivity.
+Qed.
+
+Lemma PlusAssoc {A B C}
+  : Iso.T (A + (B + C)) ((A + B) + C).
+Proof.
+unshelve econstructor; intros x.
+- destruct x as [? | []]; auto.
+- destruct x as [[] | ?]; auto.
+- destruct x as [? | []]; auto.
+- destruct x as [[] | ?]; auto.
+Defined.
+
+Lemma optionCong {A B} (i : Iso.T A B)
+  : Iso.T (option A) (option B).
+Proof.
+unshelve econstructor; intros x.
+- destruct x. 
+  + apply Some. apply i. assumption. 
+  + apply None.
+- destruct x.
+  + apply Some. apply i. assumption. 
+  + apply None.
+- destruct x; simpl; auto.
+  rewrite Iso.from_to. reflexivity.
+- destruct x; simpl; auto.
+  rewrite Iso.to_from. reflexivity.
+Defined. 
+
+Lemma finPlus1 {m n : nat} :
+  Iso.T (Fin m + Fin n) (Fin (m + n)).
+Proof.
+induction m; simpl.
+- eapply Iso.Trans. eapply Iso.PlusComm.
+  eapply Iso.Sym.  apply botNull.
+- eapply Iso.Trans. eapply Iso.PlusCong.
+  eapply option_Succ. apply Iso.Refl.
+  eapply Iso.Trans.
+  eapply Iso.Sym. eapply PlusAssoc.
+  eapply Iso.Trans. eapply Iso.Sym. eapply option_Succ.
+  apply optionCong. assumption.
+Defined.
+
+Lemma mult_Empty_l {A}
+  : Iso.T (Empty_set * A) Empty_set.
+Proof.
+unshelve econstructor; intros x.
+- destruct x. assumption.
+- destruct x.
+- destruct x as [[] ?].
+- destruct x.
+Defined.
+
+Lemma mult_plus_distr_l {A B C}
+  : Iso.T ((A + B) * C) (A * C + B * C).
+Proof.
+unshelve econstructor; intros x.
+- destruct x as [[? | ?] ?]; auto.
+- destruct x as [[? ?] | [? ?]]; auto.
+- destruct x as [[? | ?] ?]; auto.
+- destruct x as [[? ?] | [? ?]]; auto.
+Defined.
+
+Lemma mult_unit_l {A}
+  : Iso.T (unit * A) A.
+Proof.
+unshelve econstructor; intros x.
+- destruct x; auto.
+- exact (tt, x).
+- destruct x as [[] ?]; auto.
+- auto.
+Defined.
+
+Definition finMult1 {m n : nat}
+  : Iso.T (Fin m * Fin n) (Fin (m * n)).
+Proof.
+induction m; simpl.
+- apply mult_Empty_l.
+- eapply Iso.Trans. eapply Iso.TimesCong.
+  eapply option_Succ. apply Iso.Refl.
+  eapply Iso.Trans. apply mult_plus_distr_l.
+  eapply Iso.Trans. eapply Iso.PlusCong.
+  eapply mult_unit_l. eassumption.
+  apply finPlus1.
+Defined.
+
+Lemma finPlus {m n : nat} :
+  Iso.T (Fin m + Fin n) (Fin (m + n)).
+Proof.
+unshelve eapply (
+{| Iso.to := fun x => match x with
+   | inl a => FinL a
+   | inr b => FinR b
+   end
+ ; Iso.from := split m n
+|}).
+- intros. destruct a; simpl.
+  apply splitL. apply splitR.
+- intros. simpl. induction m.
+  + simpl. reflexivity.
+  + induction b. 
+    * specialize (IHm a).  simpl.
+      destruct (split m n a) eqn:sa.
+      simpl. congruence. congruence.
+    * simpl. reflexivity.
+Defined.
+
+Lemma splittL : forall {m n : nat} {x : Fin.t m},
+  splitt m n (Fin.L n x) = inl x.
 Proof.
 intros m. induction m; intros n x.
 - inversion x.
@@ -100,26 +266,26 @@ intros m. induction m; intros n x.
   + rewrite (IHm n x). reflexivity.
 Qed.
 
-Lemma splitR : forall {m n : nat} {x : Fin.t n},
-  split m n (Fin.R m x) = inr x.
+Lemma splittR : forall {m n : nat} {x : Fin.t n},
+  splitt m n (Fin.R m x) = inr x.
 Proof.
 intros m. induction m; intros n x; simpl.
 - reflexivity.
 - rewrite (IHm n x). reflexivity.
 Qed.
 
-Lemma splitInj : forall {m n : nat} {x y : Fin.t (m + n)},
-  split m n x = split m n y -> x = y.
+Lemma splittInj : forall {m n : nat} {x y : Fin.t (m + n)},
+  splitt m n x = splitt m n y -> x = y.
 Proof.
 intros m; induction m; intros n x y Heq.
 - inversion Heq. reflexivity.
 - dependent destruction x; dependent destruction y.
   + reflexivity.
-  + simpl in Heq. destruct (split m n y); inversion Heq.
-  + simpl in Heq. destruct (split m n x); inversion Heq.
+  + simpl in Heq. destruct (splitt m n y); inversion Heq.
+  + simpl in Heq. destruct (splitt m n x); inversion Heq.
   + apply f_equal. simpl in Heq. apply IHm.
-    destruct (split m n x) eqn:sx;
-    destruct (split m n y) eqn:sy.
+    destruct (splitt m n x) eqn:sx;
+    destruct (splitt m n y) eqn:sy.
     apply f_equal. 
     assert (forall (A B : Type) (x y : A), @inl A B x = @inl A B y -> x = y).
     intros A B x0 y0 Heqn. inversion Heqn. reflexivity.
@@ -127,20 +293,19 @@ intros m; induction m; intros n x y Heq.
     inversion Heq. inversion Heq. apply f_equal. injection Heq. trivial.
 Qed.
 
-Fixpoint splitMult (m : nat)
+Fixpoint splittMult (m : nat)
   : forall (n : nat), Fin.t (m * n) -> (Fin.t m * Fin.t n) 
   := match m return (forall (n : nat), Fin.t (m * n) -> (Fin.t m * Fin.t n)) with
   | 0 => fun _ => Fin.case0 _
-  | S m' => fun n x => match split n (m' * n) x with
+  | S m' => fun n x => match splitt n (m' * n) x with
     | inl a => (Fin.F1, a)
-    | inr b => match splitMult m' n b with
+    | inr b => match splittMult m' n b with
       | (x, y) => (Fin.FS x, y)
       end
     end
   end.
 
-
-Lemma finPlus : forall {m n : nat},
+Lemma fintPlus : forall {m n : nat},
   Iso.T (Fin.t m + Fin.t n) (Fin.t (m + n)).
 Proof.
 intros m n.
@@ -149,7 +314,7 @@ refine (
    | inl a => Fin.L n a
    | inr b => Fin.R m b
    end
- ; Iso.from := split m n
+ ; Iso.from := splitt m n
 |}).
 intros. destruct a; simpl. induction m; simpl.
 - inversion t.
@@ -162,37 +327,56 @@ Require Import Program.
   + reflexivity.
   + dependent destruction b; simpl. reflexivity.
      pose proof (IHm b).
-     destruct (split m n b) eqn:seqn;
+     destruct (splitt m n b) eqn:seqn;
      simpl; rewrite H; reflexivity.
 Qed.
 
-Lemma finMult : forall {m n : nat},
+Lemma fintMult : forall {m n : nat},
   Iso.T (Fin.t m * Fin.t n) (Fin.t (m * n)).
 Proof.
 intros m n.
 refine (
 {| Iso.to := fun x => match x with (a, b) => Fin.depair a b end
- ; Iso.from := splitMult m n
+ ; Iso.from := splittMult m n
 |}).
 intros p. destruct p.
 induction m; simpl.
 - inversion t.
 - dependent destruction t; simpl.
-  + rewrite splitL. reflexivity.
-  + rewrite splitR. rewrite (IHm t). reflexivity.
+  + rewrite splittL. reflexivity.
+  + rewrite splittR. rewrite (IHm t). reflexivity.
 
 - induction m; intros b; simpl.
   + inversion b.
-  + destruct (split n (m * n) b) eqn:seqn.
-    * simpl. rewrite <- splitL in seqn. 
-      apply splitInj in seqn. symmetry. assumption.
+  + destruct (splitt n (m * n) b) eqn:seqn.
+    * simpl. rewrite <- splittL in seqn. 
+      apply splittInj in seqn. symmetry. assumption.
     * pose proof (IHm t). assert (b = Fin.R n t).
-      apply (@splitInj n (m * n)). 
-      rewrite seqn. symmetry. apply splitR.
+      apply (@splittInj n (m * n)). 
+      rewrite seqn. symmetry. apply splittR.
       rewrite H0. simpl.
-      destruct (splitMult m n t) eqn:smeqn.
+      destruct (splittMult m n t) eqn:smeqn.
       simpl. rewrite <- H. reflexivity.
 Defined.
+
+Definition splitMult (m : nat)
+  : forall n : nat, Fin (m * n) -> Fin m * Fin n.
+Proof.
+induction m; intros n x.
+- induction x.
+- destruct (split _ _ x) as [l | r].
+  + exact (None, l).
+  + destruct (IHm _ r) as [a b].
+    exact (Some a, b).
+Defined.
+
+Definition depair {m n : nat}
+  : Fin m * Fin n -> Fin (m * n).
+Proof.
+induction m; simpl; intros x.
+- destruct x as [[] ?].
+- destruct x as [x y]. destruct x as [l | r].
+Abort.
 
 Fixpoint pow (b e : nat) : nat := match e with
   | 0 => 1
@@ -208,7 +392,7 @@ intros e. induction e; intros n; simpl.
   eapply Iso.Sym. apply botNull. eapply Iso.Trans. Focus 2.
   eapply Iso.FuncCong. eapply Iso.Sym. apply finIso. apply Iso.Refl.
   simpl. apply Iso.Sym. apply Iso.FFunc.
-- eapply Iso.Trans. eapply Iso.Sym. apply finMult.
+- eapply Iso.Trans. eapply Iso.Sym. apply fintMult.
   eapply Iso.Trans. Focus 2. eapply Iso.FuncCong.
   eapply Iso.Sym. apply finIso. apply Iso.Refl.
   simpl. eapply Iso.Trans. Focus 2. eapply Iso.Sym.
@@ -263,9 +447,9 @@ induction t; simpl.
   simpl. eapply Iso.Trans. apply option_Succ. eapply Iso.Sym. apply botNull.
 - eapply Iso.Trans. eapply Iso.PlusCong. eassumption.
   eassumption.
-  apply finPlus.
+  apply fintPlus.
 - eapply Iso.Trans. eapply Iso.TimesCong; try eassumption.
-  apply finMult.
+  apply fintMult.
 - eapply Iso.Trans. eapply Iso.FuncCong; try eassumption.
   apply Iso.Sym. apply finPow.
 - apply Iso.Refl.
@@ -297,17 +481,24 @@ Fixpoint card {A} (fin : T A) := match fin with
   | FIso _ _ x iso => card x
   end.
 
-Definition fin (n : nat) : T (Fin.t n).
+Definition finT (n : nat) : T (Fin.t n).
 Proof. eapply FIso. Focus 2. eapply Iso.Sym. eapply finIso.
 induction n; simpl.
 - apply F0.
 - apply FS. assumption.
 Defined.
 
+Definition fin (n : nat) : T (Fin n).
+Proof.
+induction n.
+- exact F0.
+- apply FS. assumption.
+Defined.
+
 Definition finU (A : U) : T (ty A).
 Proof. 
 eapply FIso. Focus 2. eapply Iso.Sym. apply finChar.
-apply fin.
+apply finT.
 Qed.
 
 Definition iso {A : Type} (fin : T A) : Iso.T A (Fin.t (card fin)).
@@ -330,7 +521,7 @@ Definition true : T unit := finU U1.
 Definition plus {A B : Type} (fa : T A) (fb : T B) : T (A + B).
 Proof.
 eapply (@FIso (Fin.t (card fa + card fb))). apply (finU (UFint _)).
-eapply Iso.Trans. eapply Iso.Sym. apply finPlus.
+eapply Iso.Trans. eapply Iso.Sym. apply fintPlus.
 eapply Iso.PlusCong; eapply Iso.Sym; apply iso.
 Qed.
 
@@ -472,7 +663,6 @@ generalize dependent P. induction fin; intros P decP.
   apply proof_irrelevance.
 Defined.
 
-
 Require Import Coq.Lists.List.
 
 Import ListNotations.
@@ -585,13 +775,10 @@ Definition toT' {A} (fin : T A) : T' A
 Definition fromT' {A} (fn : T' A) : T A.
 Proof.
 unshelve econstructor.
-2: exact (fin (Tcard fn)).
-eapply Iso.Trans.
-2: apply (Iso.Sym (Tiso fn)).
-apply finIso.
+2: exact (fin (Tcard fn)). apply Iso.Sym. apply fn.
 Defined.
 
-Class TC (A : Type) := {TCfin : T A}.
+Class TC (A : Type) := {TCfin : T' A}.
 
 Fixpoint elements_Fin (n : nat) : list (Fin n) := match n with
   | 0 => []
@@ -647,4 +834,26 @@ Lemma elements'_Permutation : forall A (x1 x2 : T' A),
 Proof.
 intros. apply NoDup_Permutation; try apply elements'_NoDup.
 intros; split; intros; apply elements'_Full.
+Qed.
+
+Lemma elements_Fin_same {n}
+  : elements_Fin n = elements (fin n). 
+Proof.
+induction n.
+- simpl. reflexivity.
+- simpl. repeat f_equal. assumption.
+Qed.
+
+Lemma elements_fromT' {A} (F : T' A)
+  : elements' F = elements (fromT' F).
+Proof.
+unfold fromT'. unfold elements'. rewrite elements_Fin_same.
+reflexivity.
+Qed.
+
+Lemma elements_elements'_Permutation {A} (F : T A) (F' : T' A)
+  : Permutation (elements F) (elements' F').
+Proof.
+rewrite elements_fromT'.
+apply elements_Permutation.
 Qed.
