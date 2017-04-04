@@ -11,6 +11,15 @@ Fixpoint Fin (n : nat) : Set := match n with
   | S n' => option (Fin n')
   end.
 
+Fixpoint Fin_to_nat {n : nat} : Fin n -> nat :=
+  match n with
+  | 0 => Datatypes.Empty_set_rect _
+  | S n' => fun x => match x with
+    | None => 0%nat
+    | Some x' => S (Fin_to_nat x')
+    end
+  end.
+
 (** Fin and Fin.t are isomorphic for every size. *)
 Theorem finIso (n : nat) : Iso.T (Fin.t n) (Fin n).
 Proof.
@@ -857,3 +866,8 @@ Proof.
 rewrite elements_fromT'.
 apply elements_Permutation.
 Qed.
+
+Global Instance Fin_FiniteTC (k : nat) : TC (Fin k).
+Proof.
+constructor. exists k. apply Iso.Refl. 
+Defined.
