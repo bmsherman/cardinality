@@ -1,4 +1,4 @@
-Require Import Finite finite_iso
+  Require Import Finite finite_iso
   Coq.Lists.List
   Coq.Sorting.Permutation.
  
@@ -55,6 +55,29 @@ Fixpoint sum_Fin {n : nat} : (Finite.Fin n -> R) -> R := match n with
   | 0 => fun f => zero
   | S n' => fun f => f None + sum_Fin (fun x => f (Some x))
   end.
+
+Fixpoint last_Fin (k : nat) : Finite.Fin (S k) := match k with
+  | 0 => None
+  | S k' => Some (last_Fin k')
+  end.
+
+Fixpoint lift_Fin {n : nat} : Fin n -> Fin (S n) := match n with
+  | 0 => Empty_set_rect _
+  | S n' => fun x => match x with
+    | None => None
+    | Some x' => Some (lift_Fin x')
+    end
+  end.
+
+Lemma sum_Fin_last {n : nat} (f : Finite.Fin (S n) -> R) :
+  sum_Fin f = sum_Fin (fun x : Finite.Fin n => f (lift_Fin x)) + f (last_Fin n).
+Proof.
+induction n; simpl.
+- rewrite plus_zero_r. rewrite plus_zero_l. reflexivity.
+- specialize (IHn (fun x => f (Some x))).
+  simpl in IHn. rewrite <- !plus_assoc. f_equal. 
+  apply IHn.
+Qed.
 
 Fixpoint sum_finiteT {A} (F : Finite.T A) 
   : (A -> R) -> R := match F with
