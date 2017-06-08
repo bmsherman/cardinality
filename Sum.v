@@ -181,6 +181,26 @@ induction n; simpl.
 - f_equal; auto.
 Qed.
 
+Fixpoint ntimes (n : nat) (x : R) : R :=
+  match n with
+  | 0 => zero
+  | S n' => x + ntimes n' x
+  end.
+
+Lemma sum_Fin_constant (n : nat) (c : R) 
+  : sum_Fin (fun _ : Fin n => c) = ntimes n c.
+Proof.
+induction n. 
+- reflexivity.
+- simpl. rewrite IHn. reflexivity.
+Qed.
+
+Lemma sum_finiteT'_constant {A} (F : Finite.T' A)
+  (c : R) : sum_finiteT' F (fun _ => c) = ntimes (Tcard F) c.
+Proof.
+unfold sum_finiteT'. apply sum_Fin_constant.
+Qed.
+
 Lemma sum_finiteT'_extensional {A} {F : Finite.T' A}
   (f f' : A -> R)
   (H : forall a, f a = f' a)
