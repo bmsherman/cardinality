@@ -63,10 +63,22 @@ Theorem no_iso_ineq : forall A B,
   (Iso.T A B -> False) ->
   A <> B.
 Proof.
-  unfold not; intros.
-  apply H.
-  rewrite H0.
-  apply Iso.Refl.
+  unfold not; intros; subst.
+  auto using Iso.Refl.
+Qed.
+
+Theorem no_iso_ineq_set : forall (A B:Set),
+  (Iso.T A B -> False) ->
+  A <> B.
+Proof.
+  unfold not; intros; subst.
+  auto using Iso.Refl.
+Qed.
+
+Corollary nat_not_baire_space : nat <> (nat -> nat).
+Proof.
+  apply no_iso_ineq_set.
+  apply Iso.Cantor.
 Qed.
 
 Theorem one_cardinality : forall A n m
