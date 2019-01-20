@@ -261,6 +261,16 @@ Proof. refine (
 - destruct b; reflexivity.
 Defined.
 
+Definition MultComm {A B} : T (A * B) (B * A).
+Proof.
+unshelve eapply (
+  {| to := fun p : A * B => let (x, y) := p in (y, x)
+   ; from := fun p : B * A => let (y, x) := p in (x, y)
+  |}).
+- simpl. intros p. destruct p. reflexivity.
+- simpl. intros p. destruct p. reflexivity.
+Defined.
+
 Theorem eq_dec {A B : Type} : (forall x y : A, {x = y} + {x <> y})
   -> T A B -> forall x y : B, {x = y} + {x <> y}.
 Proof.
